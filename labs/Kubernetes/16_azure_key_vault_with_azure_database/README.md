@@ -34,50 +34,22 @@ First we need to create Azure Key Vault service and store some sensitive informa
 1. Go **Next** until last blade. Leave all fields by default.
 1. Click **Create** and wait for the deployment to finish. Be sure to actually click "Create" after validation succeeded.
 
-## Task 2: Create custom secret in yout key vault
+## Task 2: Create custom secrets in yout key vault
 
 1. Open your Azure Key Vault service.
 1. From the left pane select "Secrets".
 1. Click "Generate/Import" button
-1. Fill the form:
+1. Create secrets required to connect to Azure Database for Postgres (make sure values match your Postgres configuration):
 
-    - **Upload options:** Manual
-    - **Name:** choose your secret's name (e.g.: `mysecret`)
-    - **Value:** enter your secret's custom value
-    - leave all other fields with default values
+    - Secret name: `PGUSER`, value: `postgres`
+    - Secret name: `PGHOST`, value: `<DB_SERVER_NAME>`
+    - Secret name: `PGPASSWORD`, value: `Chmurowisko123`
+    - Secret name: `PGDATABASE`, value: `test`
+    - Secret name: `PGPORT`, value: `5432`
 
-1. Click **Create**
-1. You should see your new secret on secrets list.
+    While creating a secret leave all other fields with default values
 
-## Task 3: Install Azure CSI driver
-
-Now we are going install and Azure CSI driver.
-
-1. Create namespace for CSI
-
-    ```bash
-    kubectl create ns csi
-    ```
-
-1. Add Helm repo:
-   
-    ```bash
-    helm repo add csi-secrets-store-provider-azure https://raw.githubusercontent.com/Azure/secrets-store-csi-driver-provider-azure/master/charts
-    ```
-
-1. Install CSI driver:
-
-    ```bash
-    helm install csi csi-secrets-store-provider-azure/csi-secrets-store-provider-azure -n csi
-    ```
-
-1. Verify the driver was installed successfully. Enter:
-
-    ```bash
-    kubectl get pods -n csi
-    ```
-
-## Task 4: Assign proper access rights for Managed Identity to Key Vault
+## Task 3: Assign proper access rights for Managed Identity to Key Vault
 
 Now you create Access Policy for your cluster Managed Identity to get secrets from Key Vault.
 
@@ -99,7 +71,45 @@ Now you create Access Policy for your cluster Managed Identity to get secrets fr
 
     ![img](./img/01-save-new-access-policy.png)
 
-## Task 5: Configure Secrets Provider
+## Task 4: Delete ConfigMap with Azure Database credentials
+
+The ConfigMap with Azure Database credentials will be no longer required, because credentials will be injected to Pod using Azure Key Vault provider.
+
+1. Run following command:
+
+    ```bash
+    kubectl delete cm cm-azure-database-connection-details
+    ```
+
+## Task 5: Install Azure CSI driver
+
+Now we are going install and Azure CSI driver.
+
+1. Create namespace for CSI
+
+    ```bash
+    kubectl create ns csi
+    ```
+
+1. Add Helm repo:
+   
+    ```bash
+    helm repo add csi-secrets-store-provider-azure https://raw.githubusercontent.com/Azure/secrets-store-csi-driver-provider-azure/master/charts
+    ```
+
+1. Install CSI driver:
+
+    ```bash
+    helm install csi csi-secrets-store-provider-azure/csi-secrets-store-provider-azure -n csi --set secrets-store-csi-driver.syncSecret.enabled=true
+    ```
+
+1. Verify the driver was installed successfully. Enter:
+
+    ```bash
+    kubectl get pods -n csi
+    ```
+
+## Task 6: Configure Secrets Provider
 
 Now we need to configure the Azure CSI driver. 
 
@@ -118,25 +128,29 @@ Now we need to configure the Azure CSI driver.
     kubectl apply -f secret-provider.yaml
     ```
 
-## Task 6: Mount key vault secret as a volume in a pod
+## Task 7: Update `azure-database` deployment
 
-1. Create a sample pod with csi volume mounted. Use [pod-csi](./files/pod-csi.yaml) file:
+1. Check the contents of the [./files/deployment.yaml](./files/deployment.yaml)
 
-    ```bash
-    kubectl apply -f pod-csi.yaml
-    ```
-
-1. Verify that the file with secret exists:
+1. Apply new version of `azure-database` Deployment
 
     ```bash
-    kubectl exec nginx-secrets-store-inline -- ls /mnt/secrets-store/
+    kubectl apply -f deployment.yaml
     ```
 
-1. Verify the content of the file:
+1. Verify that the Pod is Running:
 
     ```bash
-    kubectl exec nginx-secrets-store-inline -- cat /mnt/secrets-store/SECRET_1
+    kubectl get pods
     ```
+
+1. Verify the Environment Variables inside the Pod:
+
+    ```bash
+    kubectl exec <pod_name> -- env
+    ```
+
+1. Verify if application is still getting data from database
 
 ## END LAB
 
